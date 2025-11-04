@@ -17,6 +17,9 @@ import {
   CollectionJson,
 } from './src';
 
+import { LogSinksSetConsoleArgs, LogSinksSetFileArgs, LogSinksSetCustomArgs } from './src/log-sinks-types';
+
+
 /**
  * Represents the data that is returned from a listener callback
  *
@@ -948,4 +951,22 @@ export interface ICoreEngine {
    * @returns A promise that resolves when the identity is deleted.
    */
   URLEndpointListener_deleteIdentity(args: URLEndpointListenerTLSIdentityArgs): Promise<void>;
+
+  /**
+   * Sets or disables the console log sink
+   * Pass null values to disable
+   */
+  logsinks_SetConsole(args: LogSinksSetConsoleArgs): Promise<void>;
+  
+  /**
+   * Sets or disables the file log sink
+   * Pass null values to disable
+   */
+  logsinks_SetFile(args: LogSinksSetFileArgs): Promise<void>;
+  
+  /**
+   * Sets or disables the custom log sink with callback
+   * Pass null values to disable
+   */
+  logsinks_SetCustom(args: LogSinksSetCustomArgs): Promise<void>;
 }
