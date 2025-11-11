@@ -1,88 +1,130 @@
-import { ReplicatedDocumentFlag } from "./replicated-document";
-
-export type ReplicationFilter = (document: Document, flags: ReplicatedDocumentFlag[]) => boolean;
-
+/**
+ * **[DEPRECATED - Use CollectionConfiguration instead]**
+ * 
+ * Configuration for collection replication (OLD API).
+ * This class allows multiple collections to share the same replication configuration.
+ * 
+ * **Migration Guide:**
+ * ```typescript
+ * // OLD API (still works):
+ * const config = new CollectionConfig();
+ * config.setChannels(['public']);
+ * replConfig.addCollections([collection1, collection2], config);
+ * 
+ * // NEW API (recommended):
+ * const config1 = new CollectionConfiguration(collection1).setChannels(['public']);
+ * const config2 = new CollectionConfiguration(collection2).setChannels(['public']);
+ * const replConfig = new ReplicatorConfiguration([config1, config2], endpoint);
+ * ```
+ * 
+ * @deprecated Use {@link CollectionConfiguration} instead for better type safety and clarity.
+ */
 export class CollectionConfig {
   private channels: string[];
-  private documentIds: string[];
-  private pushFilter?: string;
-  private pullFilter?: string;
+  private documentIDs: string[];
+  private pullFilter: string;
+  private pushFilter: string;
 
- /**
-  * The collection configuration that can be configured specifically for the replication.
-  */
-  constructor(
-    channels: string[] | null | undefined,
-    documentIds: string[] | null | undefined
-  ) {
-    this.channels = channels ?? [];
-    this.documentIds = documentIds ?? [];
+  constructor() {
+    this.channels = [];
+    this.documentIDs = [];
+    this.pullFilter = undefined;
+    this.pushFilter = undefined;
   }
 
-   /**
-   * An array of Sync Gateway/App Services channel names to pull from. Ignored for push replication. If unset, all accessible channels will be pulled. Note: channels that are not accessible to the user will be ignored by Sync Gateway.
-   * @param {string[]} channels - Array of channel names to configure for the collection
-   * @example
-   * const config = new CollectionConfig();
-   * config.setChannels(['channel1', 'channel2']);
+  /**
+   * Gets the list of Sync Gateway channel names to pull from.
+   * 
+   * @returns Array of channel names
+   * @deprecated Use {@link CollectionConfiguration.getChannels} instead
+   */
+  getChannels(): string[] {
+    return this.channels;
+  }
+
+  /**
+   * Gets the list of document IDs to replicate.
+   * 
+   * @returns Array of document IDs
+   * @deprecated Use {@link CollectionConfiguration.getDocumentIDs} instead
+   */
+  getDocumentIDs(): string[] {
+    return this.documentIDs;
+  }
+
+  /**
+   * Gets the pull replication filter function.
+   * 
+   * @returns The pull filter function as a string
+   * @deprecated Use {@link CollectionConfiguration.getPullFilter} instead
+   */
+  getPullFilter(): string {
+    return this.pullFilter;
+  }
+
+  /**
+   * Gets the push replication filter function.
+   * 
+   * @returns The push filter function as a string
+   * @deprecated Use {@link CollectionConfiguration.getPushFilter} instead
+   */
+  getPushFilter(): string {
+    return this.pushFilter;
+  }
+
+  /**
+   * Sets the list of Sync Gateway channel names to pull from.
+   * 
+   * @param channels - Array of channel names
+   * @deprecated Use {@link CollectionConfiguration.setChannels} instead
    */
   setChannels(channels: string[]) {
     this.channels = channels;
   }
 
-    /**
-   * A set of document IDs to filter by: if given, only documents with these IDs will be pushed and/or pulled. 
-   * @param {string[]} documentIds - Array of document IDs to include in replication
-   * @example
-   * const config = new CollectionConfig();
-   * config.setDocumentIDs(['doc1', 'doc2', 'doc3']);
+  /**
+   * Sets the list of document IDs to replicate.
+   * 
+   * @param documentIDs - Array of document IDs
+   * @deprecated Use {@link CollectionConfiguration.setDocumentIDs} instead
    */
-  setDocumentIDs(documentIds: string[]) {
-    this.documentIds = documentIds;
+  setDocumentIDs(documentIDs: string[]) {
+    this.documentIDs = documentIDs;
   }
 
   /**
-   * Set a filter function for push replication. Only documents for which the function returns true will be pushed.
-   * Inside filter body document and flag object methods can't be used.
-   * @param {ReplicationFilter} filter - Function that returns true to replicate the document
-   * @example
-   * const config = new CollectionConfig();
-   * config.setPushFilter((doc, flags) => {
-   *   return doc["type"] === 'user' && !flags.includes(ReplicatedDocumentFlag.DELETED);
-   * });
+   * Sets the pull replication filter.
+   * 
+   * @param pullFilter - Filter function for pull replication
+   * @deprecated Use {@link CollectionConfiguration.setPullFilter} instead
    */
-  setPushFilter(filter: ReplicationFilter) {
-    // Convert function to string for bridge transport
-    this.pushFilter = filter.toString();
-  }
-
-   /**
-   * Set a filter function for pull replication. Only documents for which the function returns true will be pulled.
-   * Inside filter body document and flag object methods can't be used.
-   * @param {ReplicationFilter} filter - Function that returns true to replicate the document
-   * @example
-   * const config = new CollectionConfig();
-   * config.setPullFilter((doc, flags) => {
-   *    return doc["type"] === 'user' && !flags.includes(ReplicatedDocumentFlag.DELETED);
-   * });
-   */
-  setPullFilter(filter: ReplicationFilter) {
-    // Convert function to string for bridge transport
-    this.pullFilter = filter.toString();
+  setPullFilter(pullFilter: (document: any, flags: string[]) => boolean) {
+    this.pullFilter = pullFilter.toString();
   }
 
   /**
-   * Get the pull filter function string
+   * Sets the push replication filter.
+   * 
+   * @param pushFilter - Filter function for push replication
+   * @deprecated Use {@link CollectionConfiguration.setPushFilter} instead
    */
-  getPushFilter(): string | undefined {
-    return this.pushFilter;
+  setPushFilter(pushFilter: (document: any, flags: string[]) => boolean) {
+    this.pushFilter = pushFilter.toString();
   }
 
   /**
-   * Get the pull filter function string
+   * Converts this config to JSON for the native layer.
+   * 
+   * @returns JSON object
+   * @internal
    */
-  getPullFilter(): string | undefined {
-    return this.pullFilter;
+  toJson(): any {
+    return {
+      channels: this.channels,
+      documentIds: this.documentIDs,
+      pullFilter: this.pullFilter,
+      pushFilter: this.pushFilter,
+    };
   }
-
 }
+

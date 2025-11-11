@@ -5,6 +5,7 @@ export * from './blob';
 export * from './collation';
 export * from './collection';
 export * from './collection-config';
+export * from './collection-configuration';
 export * from './concurrency-control';
 export * from './couchbase-lite-exception';
 export * from './database-configuration';

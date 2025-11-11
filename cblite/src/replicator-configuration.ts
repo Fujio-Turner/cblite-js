@@ -1,5 +1,6 @@
 import { Authenticator } from './authenticator';
 import { Collection } from './collection';
+import { CollectionConfiguration } from './collection-configuration';
 import { CollectionConfig } from './collection-config';
 import { Endpoint } from './endpoint';
 
@@ -38,7 +39,12 @@ export class ReplicatorConfiguration {
   private acceptOnlySelfSignedCerts: boolean;
   private autoPurgeEnabled: boolean;
   private acceptParentDomainCookies: boolean;
-  private readonly collections: Map<Collection[], CollectionConfig>;
+  private readonly collectionConfigurations: CollectionConfiguration[];
+  private target: Endpoint; // Made mutable for dual API support
+  
+  // OLD API support
+  private collectionsMap: Map<Collection[], CollectionConfig> = new Map();
+  private isNewApi: boolean = false;
 
   public static defaultContinuous: boolean = false;
   public static defaultEnableAutoPurge: boolean = true;
@@ -49,11 +55,69 @@ export class ReplicatorConfiguration {
   public static defaultMaxAttemptsSingleShot: number = 10;
   public static defaultMaxAttemptsWaitTime: number = 300;
 
-  constructor(private target: Endpoint) {
-    this.replicatorType = ReplicatorType.PUSH_AND_PULL;
-    this.target = target;
-    this.collections = new Map();
+  /**
+   * Creates a new ReplicatorConfiguration.
+   * 
+   * **DUAL API SUPPORT:**
+   * 
+   * **NEW API (Recommended):**
+   * Pass collectionConfigurations array and endpoint at construction.
+   * Collections and endpoint are required, no mutation after construction.
+   * 
+   * **OLD API (Deprecated but still supported):**
+   * Pass only endpoint at construction, then use add/removeCollections() methods.
+   * 
+   * @param targetOrCollectionConfigs - Either CollectionConfiguration[] (NEW API) or Endpoint (OLD API)
+   * @param target - The endpoint (required for NEW API, omitted for OLD API)
+   * 
+   * @throws Error if NEW API is used with empty array
+   * 
+   * @example NEW API (Recommended):
+   * ```typescript
+   * const usersConfig = new CollectionConfiguration(usersCollection)
+   *   .setChannels(['public']);
+   * const config = new ReplicatorConfiguration(
+   *   [usersConfig],
+   *   new URLEndpoint('ws://localhost:4984/mydb')
+   * );
+   * ```
+   * 
+   * @example OLD API (Deprecated):
+   * ```typescript
+   * const config = new ReplicatorConfiguration(
+   *   new URLEndpoint('ws://localhost:4984/mydb')
+   * );
+   * const collConfig = new CollectionConfig();
+   * collConfig.setChannels(['public']);
+   * config.addCollections([usersCollection], collConfig);
+   * ```
+   */
+  constructor(
+    targetOrCollectionConfigs: CollectionConfiguration[] | Endpoint,
+    target?: Endpoint
+  ) {
+    // Detect which API is being used
+    if (Array.isArray(targetOrCollectionConfigs)) {
+      // NEW API: constructor(collectionConfigurations: CollectionConfiguration[], target: Endpoint)
+      if (!targetOrCollectionConfigs || targetOrCollectionConfigs.length === 0) {
+        throw new Error('At least one collection configuration is required');
+      }
+      if (!target) {
+        throw new Error('Target endpoint is required');
+      }
 
+      this.isNewApi = true;
+      this.collectionConfigurations = targetOrCollectionConfigs;
+      this.target = target;
+    } else {
+      // OLD API: constructor(target: Endpoint)
+      this.isNewApi = false;
+      this.collectionConfigurations = []; // Empty for OLD API
+      this.target = targetOrCollectionConfigs as Endpoint;
+    }
+
+    // Set default values (common to both APIs)
+    this.replicatorType = ReplicatorType.PUSH_AND_PULL;
     this.continuous = ReplicatorConfiguration.defaultContinuous;
     this.autoPurgeEnabled = ReplicatorConfiguration.defaultEnableAutoPurge;
     this.heartbeat = ReplicatorConfiguration.defaultHeartbeat;
@@ -72,41 +136,173 @@ export class ReplicatorConfiguration {
   }
 
   /**
-   * Add a collection used for the replication with an optional collection configuration. If the collection has
-   * been added before, the previous added and its configuration if specified will be replaced. If the config is omitted or a null or undefined configuration is specified, a default empty configuration will be applied.
-   *
-   * @function
+   * Gets the collection configurations for this replicator.
+   * 
+   * @returns Array of CollectionConfiguration objects
+   * 
+   * @example
+   * ```typescript
+   * const configs = replConfig.getCollectionConfigurations();
+   * for (const config of configs) {
+   *   console.log(`Collection: ${config.getCollection().name}`);
+   *   console.log(`Channels: ${config.getChannels()}`);
+   * }
+   * ```
    */
-    // eslint-disable-next-line
-  addCollection(collection: Collection, config?: CollectionConfig): void {
-    const cols: Collection[] = [];
-    cols.push(collection);
-
-    this.removeCollection(collection);
-    if (config === undefined || config === null) {
-      config = new CollectionConfig(undefined, undefined);
-    }
-    this.collections.set(cols, config);
+  getCollectionConfigurations(): CollectionConfiguration[] {
+    return this.collectionConfigurations;
   }
 
   /**
-   * Add multiple collections used for the replication with an optional shared collection configuration.
-   * If any of the collections have been added before, the previously added collections and their
-   * configuration if specified will be replaced. Adding an empty collection array will be no-ops. if
-   * specified will be replaced. If a null or undefined configuration is specified, a default empty configuration will be
-   * applied.
-   *
-   * @function
+   * Gets all collections configured for replication.
+   * 
+   * **Dual API Support:**
+   * - NEW API: Returns collections from CollectionConfiguration array
+   * - OLD API: Returns collections from collectionsMap
+   * 
+   * @returns Array of Collection objects
+   * 
+   * @example
+   * ```typescript
+   * const collections = replConfig.getCollections();
+   * console.log(`Replicating ${collections.length} collections`);
+   * ```
    */
-  addCollections(
-    collections: Collection[],
-    config?: CollectionConfig | null | undefined
-  ) {
-    this.removeCollections(collections);
-    if (config === undefined || config === null) {
-      config = new CollectionConfig(undefined, undefined);
+  getCollections(): Collection[] {
+    if (this.isNewApi) {
+      // NEW API: Get from collectionConfigurations
+      return this.collectionConfigurations.map(config => config.getCollection());
+    } else {
+      // OLD API: Get from collectionsMap
+      const collections: Collection[] = [];
+      for (const [collectionArray, _] of this.collectionsMap.entries()) {
+        collections.push(...collectionArray);
+      }
+      return collections;
     }
-    this.collections.set(collections, config);
+  }
+
+  /**
+   * Gets the replication endpoint/target.
+   * 
+   * @returns The Endpoint object
+   */
+  getTarget(): Endpoint {
+    return this.target;
+  }
+
+  /**
+   * **[OLD API]** Adds a collection to replicate with the given configuration.
+   * 
+   * @param collection - The collection to add
+   * @param config - The replication configuration for this collection
+   * 
+   * @deprecated Use NEW API constructor with CollectionConfiguration[] instead
+   * 
+   * @throws Error if called on a NEW API instance
+   * 
+   * @example
+   * ```typescript
+   * const config = new ReplicatorConfiguration(endpoint);
+   * const collConfig = new CollectionConfig();
+   * collConfig.setChannels(['public']);
+   * config.addCollection(usersCollection, collConfig);
+   * ```
+   */
+  addCollection(collection: Collection, config: CollectionConfig): void {
+    if (this.isNewApi) {
+      throw new Error('Cannot call addCollection() on NEW API instance. Collections must be provided at construction.');
+    }
+    this.collectionsMap.set([collection], config);
+  }
+
+  /**
+   * **[OLD API]** Adds multiple collections to replicate with the same configuration.
+   * 
+   * @param collections - Array of collections to add
+   * @param config - The shared replication configuration
+   * 
+   * @deprecated Use NEW API constructor with CollectionConfiguration[] instead
+   * 
+   * @throws Error if called on a NEW API instance
+   * 
+   * @example
+   * ```typescript
+   * const config = new ReplicatorConfiguration(endpoint);
+   * const collConfig = new CollectionConfig();
+   * collConfig.setChannels(['public']);
+   * config.addCollections([users, orders], collConfig);
+   * ```
+   */
+  addCollections(collections: Collection[], config: CollectionConfig): void {
+    if (this.isNewApi) {
+      throw new Error('Cannot call addCollections() on NEW API instance. Collections must be provided at construction.');
+    }
+    this.collectionsMap.set(collections, config);
+  }
+
+  /**
+   * **[OLD API]** Removes a collection from replication.
+   * 
+   * @param collection - The collection to remove
+   * 
+   * @deprecated Use NEW API constructor with CollectionConfiguration[] instead
+   * 
+   * @throws Error if called on a NEW API instance
+   */
+  removeCollection(collection: Collection): void {
+    if (this.isNewApi) {
+      throw new Error('Cannot call removeCollection() on NEW API instance. Collections are immutable.');
+    }
+    for (const [collections, _] of this.collectionsMap.entries()) {
+      if (collections.includes(collection)) {
+        const filtered = collections.filter(c => c !== collection);
+        if (filtered.length === 0) {
+          this.collectionsMap.delete(collections);
+        }
+        return;
+      }
+    }
+  }
+
+  /**
+   * **[OLD API]** Removes multiple collections from replication.
+   * 
+   * @param collections - Array of collections to remove
+   * 
+   * @deprecated Use NEW API constructor with CollectionConfiguration[] instead
+   * 
+   * @throws Error if called on a NEW API instance
+   */
+  removeCollections(collections: Collection[]): void {
+    if (this.isNewApi) {
+      throw new Error('Cannot call removeCollections() on NEW API instance. Collections are immutable.');
+    }
+    for (const collection of collections) {
+      this.removeCollection(collection);
+    }
+  }
+
+  /**
+   * **[OLD API]** Gets the configuration for a specific collection.
+   * 
+   * @param collection - The collection to get config for
+   * @returns The CollectionConfig or undefined if not found
+   * 
+   * @deprecated Use NEW API with CollectionConfiguration instead
+   * 
+   * @throws Error if called on a NEW API instance
+   */
+  getCollectionConfig(collection: Collection): CollectionConfig | undefined {
+    if (this.isNewApi) {
+      throw new Error('Cannot call getCollectionConfig() on NEW API instance. Use getCollectionConfigurations() instead.');
+    }
+    for (const [collections, config] of this.collectionsMap.entries()) {
+      if (collections.includes(collection)) {
+        return config;
+      }
+    }
+    return undefined;
   }
 
   /**
@@ -176,30 +372,6 @@ export class ReplicatorConfiguration {
     return this.authenticator;
   }
 
-  /**
-   * returns collections used for the replication.
-   *
-   * @function
-   */
-  getCollections() {
-    const keys = this.collections.keys();
-    return Array.from(keys).flat();
-  }
-
-  /**
-   * returns a copy of the collection’s config. If the config needs to be changed for the collection, the
-   * collection will need to be re-added with the updated config.
-   *
-   * @function
-   */
-  getCollectionConfig(collection: Collection): CollectionConfig | null {
-    for (const key of this.collections.keys()) {
-      if (key.includes(collection)) {
-        return this.collections.get(key);
-      }
-    }
-    return null;
-  }
 
   /**
    * returns the continuous flag indicating whether the replicator should stay
@@ -293,36 +465,6 @@ export class ReplicatorConfiguration {
     return this.replicatorType;
   }
 
-  /**
-   * Remove a group of collections from the configuration. If the collection doesn’t exist, this operation will be no ops.
-   *
-   * @function
-   */
-  removeCollections(collections: Collection[]) {
-    for (const col of collections) {
-      for (const key of this.collections.keys()) {
-        if (key.includes(col)) {
-          this.collections.delete(key);
-        }
-      }
-    }
-  }
-
-  /**
-   * Remove the collection. If the collection doesn’t exist, this operation will be no ops.
-   *
-   * @function
-   */
-  removeCollection(collection: Collection) {
-    for (const key of this.collections.keys()) {
-      if (key.includes(collection)) {
-        const newCols = key.filter((col) => col !== collection);
-        const config = this.collections.get(key);
-        this.collections.delete(key);
-        this.collections.set(newCols, config);
-      }
-    }
-  }
 
   /**
    *  Specify the replicator to accept any and only self-signed certs. Any non-self-signed certs will be rejected
@@ -489,111 +631,288 @@ export class ReplicatorConfiguration {
     this.replicatorType = replicatorType;
   }
 
+  /**
+   * Creates a deep copy of this ReplicatorConfiguration.
+   * 
+   * @returns A new ReplicatorConfiguration with the same settings
+   * 
+   * @example
+   * ```typescript
+   * const originalConfig = new ReplicatorConfiguration([...], endpoint);
+   * const clonedConfig = originalConfig.clone();
+   * clonedConfig.setContinuous(true); // Doesn't affect original
+   * ```
+   */
   public clone(): ReplicatorConfiguration {
-    const clonedConfig = new ReplicatorConfiguration(this.target);
+    console.log('[ReplicatorConfiguration.clone] Starting clone operation...');
+    console.log('[ReplicatorConfiguration.clone] API type:', this.isNewApi ? 'NEW' : 'OLD');
+    
+    let clonedConfig: ReplicatorConfiguration;
+    
+    if (this.isNewApi) {
+      console.log('[ReplicatorConfiguration.clone] Cloning NEW API config');
+      // NEW API: Clone collection configurations
+      const clonedCollectionConfigs = this.collectionConfigurations.map(config => {
+        const cloned = new CollectionConfiguration(config.getCollection());
+        cloned.setChannels([...config.getChannels()]);
+        cloned.setDocumentIDs([...config.getDocumentIDs()]);
+        if (config.getPushFilter()) {
+          // Re-create filter from string
+          const filterStr = config.getPushFilter();
+          const filterFn = eval(`(${filterStr})`);
+          cloned.setPushFilter(filterFn);
+        }
+        if (config.getPullFilter()) {
+          const filterStr = config.getPullFilter();
+          const filterFn = eval(`(${filterStr})`);
+          cloned.setPullFilter(filterFn);
+        }
+        return cloned;
+      });
 
-    // Copy primitive and object properties
+      clonedConfig = new ReplicatorConfiguration(
+        clonedCollectionConfigs,
+        this.target
+      );
+      console.log('[ReplicatorConfiguration.clone] ✅ NEW API collections cloned:', clonedCollectionConfigs.length);
+    } else {
+      console.log('[ReplicatorConfiguration.clone] Cloning OLD API config');
+      // OLD API: Create config with endpoint only, then restore collectionsMap
+      clonedConfig = new ReplicatorConfiguration(this.target);
+      
+      // Clone the collectionsMap
+      console.log('[ReplicatorConfiguration.clone] Cloning collectionsMap, size:', this.collectionsMap.size);
+      for (const [collections, collConfig] of this.collectionsMap.entries()) {
+        // Clone the CollectionConfig (handle undefined case)
+        let clonedCollConfig: CollectionConfig | undefined;
+        
+        if (collConfig) {
+          clonedCollConfig = new CollectionConfig();
+          clonedCollConfig.setChannels([...collConfig.getChannels()]);
+          clonedCollConfig.setDocumentIDs([...collConfig.getDocumentIDs()]);
+          
+          if (collConfig.getPushFilter()) {
+            const filterStr = collConfig.getPushFilter();
+            const filterFn = eval(`(${filterStr})`);
+            clonedCollConfig.setPushFilter(filterFn);
+          }
+          
+          if (collConfig.getPullFilter()) {
+            const filterStr = collConfig.getPullFilter();
+            const filterFn = eval(`(${filterStr})`);
+            clonedCollConfig.setPullFilter(filterFn);
+          }
+        } else {
+          // collConfig is undefined, keep it undefined
+          clonedCollConfig = undefined;
+        }
+        
+        // Add to cloned config's collectionsMap
+        clonedConfig.collectionsMap.set([...collections], clonedCollConfig);
+      }
+      console.log('[ReplicatorConfiguration.clone] ✅ OLD API collectionsMap cloned, size:', clonedConfig.collectionsMap.size);
+    }
+
+    // Copy all other properties
+    console.log('[ReplicatorConfiguration.clone] Copying other properties...');
     clonedConfig.setContinuous(this.getContinuous());
-    clonedConfig.setHeaders({ ...this.getHeaders() }); // Deep copy headers
+    clonedConfig.setHeaders({ ...this.getHeaders() });
     clonedConfig.setAuthenticator(this.getAuthenticator());
     clonedConfig.setPinnedServerCertificate(this.getPinnedServerCertificate());
-    clonedConfig.setAllowReplicatingInBackground(this.getAllowReplicatingInBackground());
+    clonedConfig.setAllowReplicatingInBackground(
+      this.getAllowReplicatingInBackground()
+    );
     clonedConfig.setAutoPurgeEnabled(this.getAutoPurgeEnabled());
-    clonedConfig.setAcceptParentDomainCookies(this.getAcceptParentDomainCookies());
+    clonedConfig.setAcceptParentDomainCookies(
+      this.getAcceptParentDomainCookies()
+    );
     clonedConfig.setMaxAttempts(this.getMaxAttempts());
     clonedConfig.setMaxAttemptWaitTime(this.getMaxAttemptWaitTime());
     clonedConfig.setHeartbeat(this.getHeartbeat());
     clonedConfig.setReplicatorType(this.getReplicatorType());
+    clonedConfig.setAcceptOnlySelfSignedCerts(
+      this.getAcceptOnlySelfSignedCerts()
+    );
 
-    // Clone collections
-    for (const [collections, config] of this.collections) {
-      clonedConfig.addCollections([...collections], config);
-    }
-
+    console.log('[ReplicatorConfiguration.clone] ✅ Clone complete\n');
     return clonedConfig;
   }
 
+  /**
+   * Converts this configuration to a JSON object for the native layer.
+   * 
+   * **Dual API Support:**
+   * - NEW API: collectionConfig is an array of {collection, config} objects
+   * - OLD API: collectionConfig is an array of {collections, config} objects
+   * 
+   * The native layer automatically detects which format is being used.
+   * 
+   * @returns JSON object suitable for native bridge
+   * 
+   * @internal
+   */
   toJson(): any {
+    console.log('\n[ReplicatorConfiguration.toJson] Starting serialization...');
+    console.log('[ReplicatorConfiguration.toJson] API type:', this.isNewApi ? 'NEW' : 'OLD');
+    
     const config = {
       acceptParentDomainCookies: this.acceptParentDomainCookies,
       acceptSelfSignedCerts: this.acceptOnlySelfSignedCerts,
       allowReplicationInBackground: this.allowReplicatingInBackground,
       autoPurgeEnabled: this.autoPurgeEnabled,
-      authenticator: null,
-      collectionConfig: null,
+      authenticator: null as any,
+      collectionConfig: null as any,
       continuous: this.continuous,
-      headers: null,
+      headers: null as any,
       heartbeat: this.heartbeat,
       maxAttempts: this.maxAttempts,
       maxAttemptWaitTime: this.maxAttemptWaitTime,
-      pinnedServerCertificate: null,
+      pinnedServerCertificate: null as any,
       replicatorType: this.replicatorType,
       target: this.target.toJson(),
     };
 
-    if (this.headers !== undefined) {
-      config.headers = this.headers;
-    } else {
-      config.headers = '';
-    }
-    if (this.pinnedServerCertificate !== undefined) {
-      config.pinnedServerCertificate = this.pinnedServerCertificate;
-    } else {
-      config.pinnedServerCertificate = '';
-    }
+    console.log('[ReplicatorConfiguration.toJson] Base config properties set');
+
+    // Set headers
+    config.headers = this.headers !== undefined ? this.headers : '';
+
+    // Set pinned server certificate
+    config.pinnedServerCertificate =
+      this.pinnedServerCertificate !== undefined
+        ? this.pinnedServerCertificate
+        : '';
+
+    // Set authenticator
     if (this.authenticator !== undefined) {
       config.authenticator = {
         type: this.authenticator.getType(),
         data: this.authenticator.toJson(),
       };
+      console.log('[ReplicatorConfiguration.toJson] Authenticator set:', this.authenticator.getType());
     } else {
       config.authenticator = '';
+      console.log('[ReplicatorConfiguration.toJson] No authenticator');
     }
-    if (this.collections.size > 0) {
-      if (this.checkCollectionsScopeAndDatabase()) {
-        const colArray = [];
-        for (const [collections, collectionConfig] of this.collections) {
-          const collectionsArray = [];
-          for (const collection of collections) {
-            collectionsArray.push({ collection: collection.toJson() });
-          }
-          if (collectionConfig !== undefined || collectionConfig !== null) {
-            colArray.push({
-              collections: collectionsArray,
-              config: collectionConfig,
-            });
-          } else {
-            colArray.push({ collections: collectionsArray, config: '' });
-          }
-        }
-        config.collectionConfig = JSON.stringify(colArray);
-      } else {
+
+    // Serialize collection configurations based on API type
+    if (this.isNewApi) {
+      console.log('[ReplicatorConfiguration.toJson] Using NEW API serialization');
+      console.log('[ReplicatorConfiguration.toJson] collectionConfigurations count:', this.collectionConfigurations.length);
+      
+      // NEW API: Serialize as [{collection: {...}, config: {...}}, ...]
+      // Validate all collections are from same database and scope
+      if (!this.validateCollectionsScopeAndDatabase()) {
+        console.log('[ReplicatorConfiguration.toJson] ❌ Validation failed: Collections not from same database/scope');
         throw new Error(
           'All collections must be from the same database and scope'
         );
       }
+
+      const collectionConfigArray = this.collectionConfigurations.map(
+        collectionConfig => collectionConfig.toJson()
+      );
+      config.collectionConfig = JSON.stringify(collectionConfigArray);
+      console.log('[ReplicatorConfiguration.toJson] ✅ NEW API serialization complete');
     } else {
-      config.collectionConfig = '';
+      console.log('[ReplicatorConfiguration.toJson] Using OLD API serialization');
+      console.log('[ReplicatorConfiguration.toJson] collectionsMap size:', this.collectionsMap.size);
+      
+      // OLD API: Serialize as [{collections: [{collection: {...}}], config: {...}}, ...]
+      
+      // Validate that collections have been added
+      if (this.collectionsMap.size === 0) {
+        console.log('[ReplicatorConfiguration.toJson] ❌ Validation failed: No collections in map');
+        throw new Error(
+          'No collections specified in the configuration. Use addCollection() or addCollections() to add collections.'
+        );
+      }
+      
+      const collectionConfigArray: any[] = [];
+      
+      console.log('[OLD API] toJson() - About to serialize. collectionsMap entries:');
+      let entryIndex = 0;
+      for (const [collections, collConfig] of this.collectionsMap.entries()) {
+        console.log(`\n[OLD API] Entry ${entryIndex + 1}:`);
+        console.log('  - Collections count:', collections.length);
+        console.log('  - Collection names:', collections.map(c => c.name).join(', '));
+        console.log('  - Collection scopes:', collections.map(c => c.scope.name).join(', '));
+        console.log('  - Collection databases:', collections.map(c => c.database.getUniqueName()).join(', '));
+        
+        const collectionsArray = collections.map(c => {
+          const collectionObj = {
+            collection: {
+              name: c.name,
+              scopeName: c.scope.name,
+              databaseName: c.database.getUniqueName(),
+            }
+          };
+          console.log('  - Serialized collection:', JSON.stringify(collectionObj, null, 4));
+          return collectionObj;
+        });
+
+        // Handle undefined/null collConfig (when addCollection was called without config)
+        console.log('  - collConfig type:', typeof collConfig);
+        console.log('  - collConfig value:', collConfig);
+        console.log('  - collConfig has toJson?:', collConfig && typeof collConfig.toJson === 'function');
+        
+        let configJson;
+        if (collConfig && typeof collConfig.toJson === 'function') {
+          console.log('  - Calling collConfig.toJson()...');
+          configJson = collConfig.toJson();
+          console.log('  - toJson() returned:', configJson);
+        } else {
+          console.log('  - Using default empty config');
+          configJson = {
+            channels: [],
+            documentIDs: [],
+            pullFilter: undefined,
+            pushFilter: undefined,
+          };
+        }
+
+        const configItem = {
+          collections: collectionsArray,
+          config: configJson,
+        };
+        console.log('  - Config for this entry:', JSON.stringify(configJson, null, 4));
+        
+        collectionConfigArray.push(configItem);
+        entryIndex++;
+      }
+      
+      console.log('\n[OLD API] Final collectionConfigArray:', JSON.stringify(collectionConfigArray, null, 2));
+      config.collectionConfig = JSON.stringify(collectionConfigArray);
+      console.log('[ReplicatorConfiguration.toJson] ✅ OLD API serialization complete');
     }
+
+    console.log('[ReplicatorConfiguration.toJson] ✅ Serialization complete\n');
     return config;
   }
 
-  private checkCollectionsScopeAndDatabase(): boolean {
-    let databaseName: string = null;
-    let scopeName: string = null;
+  /**
+   * Validates that all collections are from the same database and scope.
+   * 
+   * @returns true if all collections are compatible, false otherwise
+   * 
+   * @private
+   */
+  private validateCollectionsScopeAndDatabase(): boolean {
+    if (this.collectionConfigurations.length === 0) {
+      return false;
+    }
 
-    // eslint-disable-next-line
-    for (const [collections, _] of this.collections) {
-      for (const collection of collections) {
-        if (databaseName === null && scopeName === null) {
-          databaseName = collection.database.getUniqueName();
-          scopeName = collection.scope.name;
-        } else if (
-          collection.database.getUniqueName() !== databaseName ||
-          collection.scope.name !== scopeName
-        ) {
-          return false;
-        }
+    const firstCollection = this.collectionConfigurations[0].getCollection();
+    const expectedDatabaseName = firstCollection.database.getUniqueName();
+    const expectedScopeName = firstCollection.scope.name;
+
+    for (const config of this.collectionConfigurations) {
+      const collection = config.getCollection();
+      if (
+        collection.database.getUniqueName() !== expectedDatabaseName ||
+        collection.scope.name !== expectedScopeName
+      ) {
+        return false;
       }
     }
 
