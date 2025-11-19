@@ -3,6 +3,7 @@ import { Database } from './database';
 import { EngineLocator } from './engine-locator';
 import { ResultSet } from './result';
 import { Parameters } from './parameters';
+import { ListenerToken } from './listener-token';
 
 /**
  * A database query. A Query instance can be constructed by calling
@@ -19,6 +20,7 @@ export class Query {
   //query change listener support
   private _changeListener: QueryChangeListener;
   private _didStartQueryListener: boolean;
+  private _queryListenerTokensByUuid: Map<string, ListenerToken> = new Map();
 
   constructor(queryString: string, database: Database) {
     this._queryString = queryString;
@@ -31,7 +33,7 @@ export class Query {
    *
    * @function
    */
-  async addChangeListener(listener: QueryChangeListener): Promise<string> {
+  async addChangeListener(listener: QueryChangeListener): Promise<ListenerToken> {
     this._changeListener = listener;
     const token = this._engine.getUUID();
 
@@ -51,7 +53,21 @@ export class Query {
         }
       );
       this._didStartQueryListener = true;
-      return token;
+
+      // Create ListenerToken wrapper
+      const cblListenerToken = new ListenerToken(token, async () => {
+        // calling the remove listener native method
+        await this._engine.listenerToken_Remove({
+          changeListenerToken: token
+        });
+        
+        this._queryListenerTokensByUuid.delete(token);
+        this._didStartQueryListener = false;
+      });
+
+      this._queryListenerTokensByUuid.set(token, cblListenerToken);
+
+      return cblListenerToken;
     } else {
       throw new Error(
         `Listener for query ${this._queryString} already started`
@@ -140,11 +156,29 @@ export class Query {
    *
    * @function
    */
-  async removeChangeListener(token: string) {
-    await this._database.getEngine().query_RemoveChangeListener({
-      changeListenerToken: token,
-      name: this._database.getUniqueName(),
-    });
+  async removeChangeListener(token: string | ListenerToken) {
+    const uuidToken: string = typeof token === 'string' 
+      ? token 
+      : token.getUuidToken();
+
+    // Find the CBL ListenerToken object
+    const cblListenerToken = this._queryListenerTokensByUuid.get(uuidToken);
+
+    if (cblListenerToken) {
+      await cblListenerToken.remove();
+    } else {
+      // Fallback: call generic bridge method directly
+      await this._engine.listenerToken_Remove({
+        changeListenerToken: uuidToken
+      });
+      this._didStartQueryListener = false;
+    }
+
+    // // earlier implementation using query_RemoveChangeListener
+    // await this._database.getEngine().query_RemoveChangeListener({
+    //   changeListenerToken: token,
+    //   name: this._database.getUniqueName(),
+    // });
   }
 
   setDatabase(database: Database) {
