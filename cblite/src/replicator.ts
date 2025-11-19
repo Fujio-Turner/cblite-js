@@ -300,19 +300,16 @@ export class Replicator {
       changeListenerToken: uuidToken
     });
     
-    // Cleanup - check document listener map
+    // Cleanup - because we are using a unified map, we need to check if it's a document listener or a status listener
     if (this._documentChangeListener.has(uuidToken)) {
+      // It's a document listener, so delete it from the map
       this._documentChangeListener.delete(uuidToken);
+    } else {
+      // It's a status listener so we need to reset the flag
+      this._didStartStatusChangeListener = false;
     }
 
-    // // earlier implementation using replicator_RemoveChangeListener
-    // if (this._documentChangeListener.has(token)) {
-    //   this._documentChangeListener.delete(token);
-    // }
-    // await this._engine.replicator_RemoveChangeListener({
-    //   replicatorId: this._replicatorId,
-    //   changeListenerToken: token,
-    // });
+
   }
 
   /**

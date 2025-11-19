@@ -1198,12 +1198,7 @@ export class Collection {
       this._didStartListener = false;
     }
 
-    // await this._engine.collection_RemoveChangeListener({
-    //   name: this.database.getUniqueName(),
-    //   scopeName: this.scope.name,
-    //   collectionName: this.name,
-    //   changeListenerToken: token,
-    // });
+
   }
   
   /**
@@ -1256,19 +1251,6 @@ export class Collection {
       }
     }
 
-    // // earlier implementation using collection_RemoveDocumentChangeListener
-    // await this._engine.collection_RemoveDocumentChangeListener({
-    //   name: this.database.getUniqueName(),
-    //   scopeName: this.scope.name,
-    //   collectionName: this.name,
-    //   changeListenerToken: token,
-    // });
-    //
-    // const documentId = this._docListenerTokens.get(token);
-    // if (documentId) {
-    //   this._documentChangeListener.delete(documentId);
-    //   this._docListenerTokens.delete(token);
-    // }
   }
 
   /**

@@ -174,11 +174,7 @@ export class Query {
       this._didStartQueryListener = false;
     }
 
-    // // earlier implementation using query_RemoveChangeListener
-    // await this._database.getEngine().query_RemoveChangeListener({
-    //   changeListenerToken: token,
-    //   name: this._database.getUniqueName(),
-    // });
+
   }
 
   setDatabase(database: Database) {
