@@ -1,3 +1,5 @@
+import type { CollectionConfiguration } from './collection-configuration';
+
 /**
  * **[DEPRECATED - Use CollectionConfiguration instead]**
  * 
@@ -28,8 +30,8 @@ export class CollectionConfig {
   constructor() {
     this.channels = [];
     this.documentIDs = [];
-    this.pullFilter = undefined;
-    this.pushFilter = undefined;
+    this.pullFilter = "";
+    this.pushFilter = "";
   }
 
   /**

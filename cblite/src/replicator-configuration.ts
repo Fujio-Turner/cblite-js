@@ -1,6 +1,6 @@
 import { Authenticator } from './authenticator';
 import { Collection } from './collection';
-import { CollectionConfiguration } from './collection-configuration';
+import { CollectionConfiguration, ReplicationFilter } from './collection-configuration';
 import { CollectionConfig } from './collection-config';
 import { Endpoint } from './endpoint';
 
@@ -254,11 +254,12 @@ export class ReplicatorConfiguration {
     if (this.isNewApi) {
       throw new Error('Cannot call removeCollection() on NEW API instance. Collections are immutable.');
     }
-    for (const [collections, _] of this.collectionsMap.entries()) {
+    for (const [collections, config] of this.collectionsMap.entries()) {
       if (collections.includes(collection)) {
         const filtered = collections.filter(c => c !== collection);
-        if (filtered.length === 0) {
-          this.collectionsMap.delete(collections);
+        this.collectionsMap.delete(collections);
+        if (filtered.length > 0) {
+          this.collectionsMap.set(filtered, config);
         }
         return;
       }
@@ -657,14 +658,14 @@ export class ReplicatorConfiguration {
         cloned.setChannels([...config.getChannels()]);
         cloned.setDocumentIDs([...config.getDocumentIDs()]);
         if (config.getPushFilter()) {
-          // Re-create filter from string
+          // Re-create filter from string using Function constructor (safer than eval)
           const filterStr = config.getPushFilter();
-          const filterFn = eval(`(${filterStr})`);
+          const filterFn = new Function('doc', 'flags', `return (${filterStr})(doc, flags)`) as ReplicationFilter;
           cloned.setPushFilter(filterFn);
         }
         if (config.getPullFilter()) {
           const filterStr = config.getPullFilter();
-          const filterFn = eval(`(${filterStr})`);
+          const filterFn = new Function('doc', 'flags', `return (${filterStr})(doc, flags)`) as ReplicationFilter;
           cloned.setPullFilter(filterFn);
         }
         return cloned;
@@ -693,13 +694,13 @@ export class ReplicatorConfiguration {
           
           if (collConfig.getPushFilter()) {
             const filterStr = collConfig.getPushFilter();
-            const filterFn = eval(`(${filterStr})`);
+            const filterFn = new Function('doc', 'flags', `return (${filterStr})(doc, flags)`) as (document: any, flags: string[]) => boolean;
             clonedCollConfig.setPushFilter(filterFn);
           }
           
           if (collConfig.getPullFilter()) {
             const filterStr = collConfig.getPullFilter();
-            const filterFn = eval(`(${filterStr})`);
+            const filterFn = new Function('doc', 'flags', `return (${filterStr})(doc, flags)`) as (document: any, flags: string[]) => boolean;
             clonedCollConfig.setPullFilter(filterFn);
           }
         } else {
