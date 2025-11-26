@@ -8,21 +8,35 @@ export class Scope {
 
   /**
    * Scope's name.
+   * 
+   * This property is immutable and cannot be changed after construction.
+   * Attempting to modify it will throw a TypeError at runtime.
    *
    * @property
    */
-  name: string;
+  readonly name!: string;
 
   /**
    * Scope's Database.
+   * 
+   * This property is immutable and cannot be changed after construction.
+   * Attempting to modify it will throw a TypeError at runtime.
    *
    * @property
    */
-  database: Database;
+  readonly database!: Database;
 
   constructor(name: string | undefined, database: Database) {
-    this.name = name ?? '';
-    this.database = database;
+    // Define immutable properties using Object.defineProperty
+    // This provides runtime protection in addition to TypeScript's compile-time protection
+    const propertyOptions = {
+      writable: false,      // Cannot be changed
+      configurable: false,  // Cannot be deleted or redefined
+      enumerable: true      // Visible in Object.keys(), JSON.stringify()
+    };
+
+    Object.defineProperty(this, 'name', { value: name ?? '', ...propertyOptions });
+    Object.defineProperty(this, 'database', { value: database, ...propertyOptions });
   }
 
   /**

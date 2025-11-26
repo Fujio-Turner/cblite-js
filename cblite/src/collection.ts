@@ -211,9 +211,19 @@ export class Collection {
     scope: Scope | undefined,
     database: Database
   ) {
-    this.name = name ?? '';
-    this.scope = scope ?? new Scope('', database);
-    this.database = database;
+    // Define immutable properties using Object.defineProperty
+    // This provides runtime protection in addition to TypeScript's compile-time protection
+    // Users cannot modify these properties, preventing bugs and data corruption
+    const propertyOptions = {
+      writable: false,      // Cannot be changed
+      configurable: false,  // Cannot be deleted or redefined
+      enumerable: true      // Visible in Object.keys(), JSON.stringify()
+    };
+
+    Object.defineProperty(this, 'name', { value: name ?? '', ...propertyOptions });
+    Object.defineProperty(this, 'scope', { value: scope ?? new Scope('', database), ...propertyOptions });
+    Object.defineProperty(this, 'database', { value: database, ...propertyOptions });
+
     this._documentChangeListener = new Map<string, DocumentChangeListener>();
     this._docListenerTokens = new Map<string, string>();
   }
@@ -228,6 +238,9 @@ export class Collection {
    * 
    * This is a Database object, NOT a string!
    * 
+   * This property is immutable and cannot be changed after construction.
+   * Attempting to modify it will throw a TypeError at runtime.
+   * 
    * Example usage:
    *   // This is a Database object
    *   const db = collection.database;
@@ -239,7 +252,7 @@ export class Collection {
    * 
    * @property
    */
-  database: Database;
+  readonly database!: Database;
 
   /**
    * fullName: Returns the fully qualified name of the collection.
@@ -278,6 +291,9 @@ export class Collection {
   /**
    * name: The collection's name.
    * 
+   * This property is immutable and cannot be changed after construction.
+   * Attempting to modify it will throw a TypeError at runtime.
+   * 
    * Common naming conventions:
    * - Lowercase: 'users', 'products', 'orders'
    * - CamelCase: 'userProfiles', 'orderHistory'
@@ -290,10 +306,13 @@ export class Collection {
    * 
    * @property
    */
-  name: string;
+  readonly name!: string;
 
   /**
    * scope: Reference to the Scope object this collection belongs to.
+   * 
+   * This property is immutable and cannot be changed after construction.
+   * Attempting to modify it will throw a TypeError at runtime.
    * 
    * Scopes are namespaces for organizing collections. They allow you to group
    * related collections together (e.g., 'production' scope vs 'test' scope).
@@ -306,7 +325,7 @@ export class Collection {
    * 
    * @property
    */
-  scope: Scope;
+  readonly scope!: Scope;
 
   /**
    * ==================
