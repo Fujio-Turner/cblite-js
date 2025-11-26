@@ -135,46 +135,21 @@ export class Replicator {
  * @throws {Error} If the configuration is invalid or required parameters are missing
  */
   static async create(config: ReplicatorConfiguration): Promise<Replicator> {
-    console.log('\n╔═══════════════════════════════════════════════════════════════╗');
-    console.log('║  [Replicator.create] STARTING REPLICATOR CREATION (JS)       ║');
-    console.log('╚═══════════════════════════════════════════════════════════════╝');
-    
-    console.log('[JS Step 1] Validating configuration...');
-    console.log('[JS Step 1] Collections in config:', config.getCollections().length);
     if (config.getCollections().length === 0) {
-      console.log('[JS Step 1] ❌ FAILED: No collections specified');
       throw new Error('No collections specified in the configuration');
     }
-    console.log('[JS Step 1] ✅ Configuration valid');
     
-    console.log('[JS Step 2] Getting engine instance...');
     const engine = EngineLocator.getEngine(EngineLocator.key);
-    console.log('[JS Step 2] ✅ Engine retrieved');
     
-    console.log('[JS Step 3] Serializing configuration to JSON...');
     const configJson = config.toJson();
-    console.log('[JS Step 3] ✅ Configuration serialized');
-    console.log('[JS Step 3] Config JSON keys:', Object.keys(configJson));
     
-    console.log('[JS Step 4] Calling native engine replicator_Create...');
     try {
       const ret = await engine.replicator_Create({ config: configJson });
-      console.log('[JS Step 4] ✅ Native replicator created');
-      console.log('[JS Step 4] Replicator ID:', ret.replicatorId);
       
-      console.log('[JS Step 5] Creating JavaScript Replicator wrapper...');
       const replicator = new Replicator(ret.replicatorId, config.clone());
-      console.log('[JS Step 5] ✅ Replicator wrapper created');
-      
-      console.log('\n╔═══════════════════════════════════════════════════════════════╗');
-      console.log('║  [Replicator.create] ✅ REPLICATOR CREATION SUCCESSFUL (JS)  ║');
-      console.log('╚═══════════════════════════════════════════════════════════════╝\n');
       
       return replicator;
     } catch (error) {
-      console.log('[JS Step 4] ❌ FAILED: Native replicator creation error');
-      console.log('[JS Step 4] Error:', error);
-      console.log('[JS Step 4] Error message:', error.message);
       throw error;
     }
   }

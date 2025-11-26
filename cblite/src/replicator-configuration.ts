@@ -43,7 +43,7 @@ export class ReplicatorConfiguration {
   private target: Endpoint; // Made mutable for dual API support
   
   // OLD API support
-  private collectionsMap: Map<Collection[], CollectionConfig> = new Map();
+  private collectionsMap: Map<Collection[], CollectionConfig | undefined> = new Map();
   private isNewApi: boolean = false;
 
   public static defaultContinuous: boolean = false;
@@ -645,13 +645,9 @@ export class ReplicatorConfiguration {
    * ```
    */
   public clone(): ReplicatorConfiguration {
-    console.log('[ReplicatorConfiguration.clone] Starting clone operation...');
-    console.log('[ReplicatorConfiguration.clone] API type:', this.isNewApi ? 'NEW' : 'OLD');
-    
     let clonedConfig: ReplicatorConfiguration;
     
     if (this.isNewApi) {
-      console.log('[ReplicatorConfiguration.clone] Cloning NEW API config');
       // NEW API: Clone collection configurations
       const clonedCollectionConfigs = this.collectionConfigurations.map(config => {
         const cloned = new CollectionConfiguration(config.getCollection());
@@ -675,14 +671,11 @@ export class ReplicatorConfiguration {
         clonedCollectionConfigs,
         this.target
       );
-      console.log('[ReplicatorConfiguration.clone] ✅ NEW API collections cloned:', clonedCollectionConfigs.length);
     } else {
-      console.log('[ReplicatorConfiguration.clone] Cloning OLD API config');
       // OLD API: Create config with endpoint only, then restore collectionsMap
       clonedConfig = new ReplicatorConfiguration(this.target);
       
       // Clone the collectionsMap
-      console.log('[ReplicatorConfiguration.clone] Cloning collectionsMap, size:', this.collectionsMap.size);
       for (const [collections, collConfig] of this.collectionsMap.entries()) {
         // Clone the CollectionConfig (handle undefined case)
         let clonedCollConfig: CollectionConfig | undefined;
@@ -711,11 +704,9 @@ export class ReplicatorConfiguration {
         // Add to cloned config's collectionsMap
         clonedConfig.collectionsMap.set([...collections], clonedCollConfig);
       }
-      console.log('[ReplicatorConfiguration.clone] ✅ OLD API collectionsMap cloned, size:', clonedConfig.collectionsMap.size);
     }
 
     // Copy all other properties
-    console.log('[ReplicatorConfiguration.clone] Copying other properties...');
     clonedConfig.setContinuous(this.getContinuous());
     clonedConfig.setHeaders({ ...this.getHeaders() });
     clonedConfig.setAuthenticator(this.getAuthenticator());
@@ -735,7 +726,6 @@ export class ReplicatorConfiguration {
       this.getAcceptOnlySelfSignedCerts()
     );
 
-    console.log('[ReplicatorConfiguration.clone] ✅ Clone complete\n');
     return clonedConfig;
   }
 
@@ -753,9 +743,6 @@ export class ReplicatorConfiguration {
    * @internal
    */
   toJson(): any {
-    console.log('\n[ReplicatorConfiguration.toJson] Starting serialization...');
-    console.log('[ReplicatorConfiguration.toJson] API type:', this.isNewApi ? 'NEW' : 'OLD');
-    
     const config = {
       acceptParentDomainCookies: this.acceptParentDomainCookies,
       acceptSelfSignedCerts: this.acceptOnlySelfSignedCerts,
@@ -773,8 +760,6 @@ export class ReplicatorConfiguration {
       target: this.target.toJson(),
     };
 
-    console.log('[ReplicatorConfiguration.toJson] Base config properties set');
-
     // Set headers
     config.headers = this.headers !== undefined ? this.headers : '';
 
@@ -790,21 +775,15 @@ export class ReplicatorConfiguration {
         type: this.authenticator.getType(),
         data: this.authenticator.toJson(),
       };
-      console.log('[ReplicatorConfiguration.toJson] Authenticator set:', this.authenticator.getType());
     } else {
       config.authenticator = '';
-      console.log('[ReplicatorConfiguration.toJson] No authenticator');
     }
 
     // Serialize collection configurations based on API type
     if (this.isNewApi) {
-      console.log('[ReplicatorConfiguration.toJson] Using NEW API serialization');
-      console.log('[ReplicatorConfiguration.toJson] collectionConfigurations count:', this.collectionConfigurations.length);
-      
       // NEW API: Serialize as [{collection: {...}, config: {...}}, ...]
       // Validate all collections are from same database and scope
       if (!this.validateCollectionsScopeAndDatabase()) {
-        console.log('[ReplicatorConfiguration.toJson] ❌ Validation failed: Collections not from same database/scope');
         throw new Error(
           'All collections must be from the same database and scope'
         );
@@ -814,16 +793,11 @@ export class ReplicatorConfiguration {
         collectionConfig => collectionConfig.toJson()
       );
       config.collectionConfig = JSON.stringify(collectionConfigArray);
-      console.log('[ReplicatorConfiguration.toJson] ✅ NEW API serialization complete');
     } else {
-      console.log('[ReplicatorConfiguration.toJson] Using OLD API serialization');
-      console.log('[ReplicatorConfiguration.toJson] collectionsMap size:', this.collectionsMap.size);
-      
       // OLD API: Serialize as [{collections: [{collection: {...}}], config: {...}}, ...]
       
       // Validate that collections have been added
       if (this.collectionsMap.size === 0) {
-        console.log('[ReplicatorConfiguration.toJson] ❌ Validation failed: No collections in map');
         throw new Error(
           'No collections specified in the configuration. Use addCollection() or addCollections() to add collections.'
         );
@@ -831,39 +805,22 @@ export class ReplicatorConfiguration {
       
       const collectionConfigArray: any[] = [];
       
-      console.log('[OLD API] toJson() - About to serialize. collectionsMap entries:');
-      let entryIndex = 0;
       for (const [collections, collConfig] of this.collectionsMap.entries()) {
-        console.log(`\n[OLD API] Entry ${entryIndex + 1}:`);
-        console.log('  - Collections count:', collections.length);
-        console.log('  - Collection names:', collections.map(c => c.name).join(', '));
-        console.log('  - Collection scopes:', collections.map(c => c.scope.name).join(', '));
-        console.log('  - Collection databases:', collections.map(c => c.database.getUniqueName()).join(', '));
-        
         const collectionsArray = collections.map(c => {
-          const collectionObj = {
+          return {
             collection: {
               name: c.name,
               scopeName: c.scope.name,
               databaseName: c.database.getUniqueName(),
             }
           };
-          console.log('  - Serialized collection:', JSON.stringify(collectionObj, null, 4));
-          return collectionObj;
         });
 
         // Handle undefined/null collConfig (when addCollection was called without config)
-        console.log('  - collConfig type:', typeof collConfig);
-        console.log('  - collConfig value:', collConfig);
-        console.log('  - collConfig has toJson?:', collConfig && typeof collConfig.toJson === 'function');
-        
         let configJson;
         if (collConfig && typeof collConfig.toJson === 'function') {
-          console.log('  - Calling collConfig.toJson()...');
           configJson = collConfig.toJson();
-          console.log('  - toJson() returned:', configJson);
         } else {
-          console.log('  - Using default empty config');
           configJson = {
             channels: [],
             documentIDs: [],
@@ -876,18 +833,13 @@ export class ReplicatorConfiguration {
           collections: collectionsArray,
           config: configJson,
         };
-        console.log('  - Config for this entry:', JSON.stringify(configJson, null, 4));
         
         collectionConfigArray.push(configItem);
-        entryIndex++;
       }
       
-      console.log('\n[OLD API] Final collectionConfigArray:', JSON.stringify(collectionConfigArray, null, 2));
       config.collectionConfig = JSON.stringify(collectionConfigArray);
-      console.log('[ReplicatorConfiguration.toJson] ✅ OLD API serialization complete');
     }
 
-    console.log('[ReplicatorConfiguration.toJson] ✅ Serialization complete\n');
     return config;
   }
 
