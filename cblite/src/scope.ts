@@ -29,19 +29,14 @@ export class Scope {
   constructor(name: string | undefined, database: Database) {
     // Define immutable properties using Object.defineProperty
     // This provides runtime protection in addition to TypeScript's compile-time protection
-    Object.defineProperty(this, 'name', {
-      value: name ?? '',
+    const propertyOptions = {
       writable: false,      // Cannot be changed
       configurable: false,  // Cannot be deleted or redefined
       enumerable: true      // Visible in Object.keys(), JSON.stringify()
-    });
+    };
 
-    Object.defineProperty(this, 'database', {
-      value: database,
-      writable: false,
-      configurable: false,
-      enumerable: true
-    });
+    Object.defineProperty(this, 'name', { value: name ?? '', ...propertyOptions });
+    Object.defineProperty(this, 'database', { value: database, ...propertyOptions });
   }
 
   /**

@@ -206,26 +206,15 @@ export class Collection {
     // Define immutable properties using Object.defineProperty
     // This provides runtime protection in addition to TypeScript's compile-time protection
     // Users cannot modify these properties, preventing bugs and data corruption
-    Object.defineProperty(this, 'name', {
-      value: name ?? '',
+    const propertyOptions = {
       writable: false,      // Cannot be changed
       configurable: false,  // Cannot be deleted or redefined
       enumerable: true      // Visible in Object.keys(), JSON.stringify()
-    });
+    };
 
-    Object.defineProperty(this, 'scope', {
-      value: scope ?? new Scope('', database),
-      writable: false,
-      configurable: false,
-      enumerable: true
-    });
-
-    Object.defineProperty(this, 'database', {
-      value: database,
-      writable: false,
-      configurable: false,
-      enumerable: true
-    });
+    Object.defineProperty(this, 'name', { value: name ?? '', ...propertyOptions });
+    Object.defineProperty(this, 'scope', { value: scope ?? new Scope('', database), ...propertyOptions });
+    Object.defineProperty(this, 'database', { value: database, ...propertyOptions });
 
     this._documentChangeListener = new Map<string, DocumentChangeListener>();
     this._docListenerTokens = new Map<string, string>();
