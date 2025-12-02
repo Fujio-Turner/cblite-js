@@ -743,6 +743,16 @@ export interface ICoreEngine {
   //don't need documentId to remove change listener, so using CollectionChangeListenerArgs is perfectly legal
   collection_RemoveDocumentChangeListener(args: CollectionChangeListenerArgs): Promise<void>;
 
+
+/**
+ * Generic method to remove any listener by its UUID token.
+ * This method works with all listener types (collection, query, replicator, etc.).
+ * 
+ * @param args Object containing the changeListenerToken (UUID string)
+ * @returns Promise that resolves when the listener is removed
+ */
+  listenerToken_Remove(args: {changeListenerToken: string;}): Promise<void>;
+
   /**
    * Save a document into the collection. The default concurrency control, lastWriteWins, will
    * be used when there is conflict during save.

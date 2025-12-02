@@ -88,6 +88,8 @@ import {
   CollectionChangeListener,
   ICoreEngine,
 } from '../core-types';
+import { ListenerToken } from './listener-token';
+
 
 /**
  * Interface representing the JSON serialization format of a Collection.
@@ -180,6 +182,12 @@ export class Collection {
    */
   private _docListenerTokens: Map<string, string>;
 
+
+  // 
+  private _cblListenerTokensByUuid: Map<string, ListenerToken> = new Map();
+  private _cblDocumentListenerTokensByUuid: Map<string, ListenerToken> = new Map();
+
+
   /**
    * CONSTRUCTOR
    * ===========
@@ -203,9 +211,19 @@ export class Collection {
     scope: Scope | undefined,
     database: Database
   ) {
-    this.name = name ?? '';
-    this.scope = scope ?? new Scope('', database);
-    this.database = database;
+    // Define immutable properties using Object.defineProperty
+    // This provides runtime protection in addition to TypeScript's compile-time protection
+    // Users cannot modify these properties, preventing bugs and data corruption
+    const propertyOptions = {
+      writable: false,      // Cannot be changed
+      configurable: false,  // Cannot be deleted or redefined
+      enumerable: true      // Visible in Object.keys(), JSON.stringify()
+    };
+
+    Object.defineProperty(this, 'name', { value: name ?? '', ...propertyOptions });
+    Object.defineProperty(this, 'scope', { value: scope ?? new Scope('', database), ...propertyOptions });
+    Object.defineProperty(this, 'database', { value: database, ...propertyOptions });
+
     this._documentChangeListener = new Map<string, DocumentChangeListener>();
     this._docListenerTokens = new Map<string, string>();
   }
@@ -220,6 +238,9 @@ export class Collection {
    * 
    * This is a Database object, NOT a string!
    * 
+   * This property is immutable and cannot be changed after construction.
+   * Attempting to modify it will throw a TypeError at runtime.
+   * 
    * Example usage:
    *   // This is a Database object
    *   const db = collection.database;
@@ -231,7 +252,7 @@ export class Collection {
    * 
    * @property
    */
-  database: Database;
+  readonly database!: Database;
 
   /**
    * fullName: Returns the fully qualified name of the collection.
@@ -270,6 +291,9 @@ export class Collection {
   /**
    * name: The collection's name.
    * 
+   * This property is immutable and cannot be changed after construction.
+   * Attempting to modify it will throw a TypeError at runtime.
+   * 
    * Common naming conventions:
    * - Lowercase: 'users', 'products', 'orders'
    * - CamelCase: 'userProfiles', 'orderHistory'
@@ -282,10 +306,13 @@ export class Collection {
    * 
    * @property
    */
-  name: string;
+  readonly name!: string;
 
   /**
    * scope: Reference to the Scope object this collection belongs to.
+   * 
+   * This property is immutable and cannot be changed after construction.
+   * Attempting to modify it will throw a TypeError at runtime.
    * 
    * Scopes are namespaces for organizing collections. They allow you to group
    * related collections together (e.g., 'production' scope vs 'test' scope).
@@ -298,7 +325,7 @@ export class Collection {
    * 
    * @property
    */
-  scope: Scope;
+  readonly scope!: Scope;
 
   /**
    * ==================
@@ -356,16 +383,17 @@ export class Collection {
    * 
    * @function
    */
-  async addChangeListener(listener: CollectionChangeListener): Promise<string> {
+  async addChangeListener(listener: CollectionChangeListener): Promise<ListenerToken> {
     this._changeListener = listener;
-    const token = this.uuid();
+    const uuidToken: string = this.uuid();
+
     if (!this._didStartListener) {
       await this._engine.collection_AddChangeListener(
         {
           name: this.scope.database.getUniqueName(),
           scopeName: this.scope.name,
           collectionName: this.name,
-          changeListenerToken: token,
+          changeListenerToken: uuidToken,
         },
         (data, err) => {
           if (err) {
@@ -375,7 +403,23 @@ export class Collection {
         }
       );
       this._didStartListener = true;
-      return token;
+
+
+      const cblListenerToken = new ListenerToken(uuidToken, async () => {
+        
+        // calling the remove listener native method 
+        await this._engine.listenerToken_Remove({
+          changeListenerToken: uuidToken
+        })
+
+        this._cblListenerTokensByUuid.delete(uuidToken);
+        this._didStartListener = false;
+
+      });
+
+      this._cblListenerTokensByUuid.set(uuidToken, cblListenerToken);
+
+      return cblListenerToken;
     } else {
       throw new Error('Listener already started');
     }
@@ -434,7 +478,7 @@ export class Collection {
   async addDocumentChangeListener(
     documentId: string,
     listener: DocumentChangeListener
-  ): Promise<string> {
+  ): Promise<ListenerToken> {
     if (this._documentChangeListener.has(documentId)) {
       throw new Error(`Listener for document ${documentId} already started`);
     }
@@ -458,8 +502,27 @@ export class Collection {
 
     this._documentChangeListener.set(documentId, listener);
     this._docListenerTokens.set(token, documentId);
+
+    // Create ListenerToken wrapper
+    const cblListenerToken = new ListenerToken(token, async () => {
+      // calling the remove listener native method
+      await this._engine.listenerToken_Remove({
+        changeListenerToken: token
+      });
+      
+      this._cblDocumentListenerTokensByUuid.delete(token);
+      
+      // Cleanup internal state
+      const docId = this._docListenerTokens.get(token);
+      if (docId) {
+        this._documentChangeListener.delete(docId);
+        this._docListenerTokens.delete(token);
+      }
+    });
+
+    this._cblDocumentListenerTokensByUuid.set(token, cblListenerToken);
     
-    return token;
+    return cblListenerToken;
   }
   
 
@@ -1133,15 +1196,28 @@ export class Collection {
    *
    * @function
    */
-  async removeChangeListener(token: string) {
-    await this._engine.collection_RemoveChangeListener({
-      name: this.database.getUniqueName(),
-      scopeName: this.scope.name,
-      collectionName: this.name,
-      changeListenerToken: token,
-    });
+  async removeChangeListener(token: string | ListenerToken) {
 
-    this._didStartListener = false;
+    const uuidToken: string = typeof token === 'string' 
+    ? token  // Already a UUID string
+    : token.getUuidToken(); // Extract from CBL ListenerToken
+
+
+    // Find the CBL ListenerToken object
+    const cblListenerToken = this._cblListenerTokensByUuid.get(uuidToken);
+
+    if(cblListenerToken){
+      await cblListenerToken.remove();
+    }
+    else {
+      // Fallback: call generic bridge method directly
+      await this._engine.listenerToken_Remove({
+        changeListenerToken: uuidToken,
+      });
+      this._didStartListener = false;
+    }
+
+
   }
   
   /**
@@ -1170,19 +1246,30 @@ export class Collection {
    *
    * @function
    */
-  async removeDocumentChangeListener(token: string) {
-    await this._engine.collection_RemoveDocumentChangeListener({
-      name: this.database.getUniqueName(),
-      scopeName: this.scope.name,
-      collectionName: this.name,
-      changeListenerToken: token,
-    });
+  async removeDocumentChangeListener(token: string | ListenerToken) {
+    const uuidToken: string = typeof token === 'string' 
+      ? token 
+      : token.getUuidToken();
 
-    const documentId = this._docListenerTokens.get(token);
-    if (documentId) {
-      this._documentChangeListener.delete(documentId);
-      this._docListenerTokens.delete(token);
+    // Find the CBL ListenerToken object
+    const cblListenerToken = this._cblDocumentListenerTokensByUuid.get(uuidToken);
+
+    if (cblListenerToken) {
+      await cblListenerToken.remove();
+    } else {
+      // Fallback: call generic bridge method directly
+      await this._engine.listenerToken_Remove({
+        changeListenerToken: uuidToken
+      });
+      
+      // Cleanup internal state
+      const documentId = this._docListenerTokens.get(uuidToken);
+      if (documentId) {
+        this._documentChangeListener.delete(documentId);
+        this._docListenerTokens.delete(uuidToken);
+      }
     }
+
   }
 
   /**
