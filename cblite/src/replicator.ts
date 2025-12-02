@@ -138,11 +138,20 @@ export class Replicator {
     if (config.getCollections().length === 0) {
       throw new Error('No collections specified in the configuration');
     }
+    
     const engine = EngineLocator.getEngine(EngineLocator.key);
+    
     const configJson = config.toJson();
-    const ret = await engine.replicator_Create({ config: configJson });
-    const replicator = new Replicator(ret.replicatorId, config.clone());
-    return replicator;
+    
+    try {
+      const ret = await engine.replicator_Create({ config: configJson });
+      
+      const replicator = new Replicator(ret.replicatorId, config.clone());
+      
+      return replicator;
+    } catch (error) {
+      throw error;
+    }
   }
 
   /**
