@@ -13,8 +13,14 @@ import uuid from 'react-native-uuid';
  * You can configure console logging, file logging, and custom logging.
  */
 export class LogSinks {
-  private static _engine: ICoreEngine = EngineLocator.getEngine(EngineLocator.key);
   private static currentCustomToken: string | null = null;
+
+  /**
+   * Lazily retrieves the engine instance at runtime to ensure it's initialized
+   */
+  private static get _engine(): ICoreEngine {
+    return EngineLocator.getEngine(EngineLocator.key);
+  }
 
   /**
    * Sets or disables console logging
@@ -31,14 +37,14 @@ export class LogSinks {
    */
   static async setConsole(config: ConsoleLogSinkConfig | null): Promise<void> {
     if (config === null) {
-      // Disable console logging
+      // Disable console logging - use sentinel value -1 for level
       await this._engine.logsinks_SetConsole({
-        level: null,
-        domains: null,
+        level: -1,
+        domains: [],
       });
     } else {
       // Enable console logging
-      const domains = config.domains?.map((d) => d.toString()) || null;
+      const domains = config.domains?.map((d) => d.toString()) || [];
       await this._engine.logsinks_SetConsole({
         level: config.level as number,
         domains: domains,
@@ -64,10 +70,10 @@ export class LogSinks {
    */
   static async setFile(config: FileLogSinkConfig | null): Promise<void> {
     if (config === null) {
-      // Disable file logging
+      // Disable file logging - use sentinel value -1 for level and empty config
       await this._engine.logsinks_SetFile({
-        level: null,
-        config: null,
+        level: -1,
+        config: {},
       });
     } else {
       // Enable file logging
@@ -111,11 +117,11 @@ export class LogSinks {
         this.currentCustomToken = null;
       }
       
-      // Then tell native to stop sending events
+      // Then tell native to stop sending events - use sentinel value -1 and empty strings
       await engine.logsinks_SetCustom({
-        level: null,
-        domains: null,
-        token: null,
+        level: -1,
+        domains: [],
+        token: '',
       });
     } else {
       // Enable custom logging
@@ -134,7 +140,7 @@ export class LogSinks {
       this.currentCustomToken = token;
       
       // Now tell native to start sending log events with this token
-      const domains = config.domains?.map((d) => d.toString()) || null;
+      const domains = config.domains?.map((d) => d.toString()) || [];
       
       try {
         await engine.logsinks_SetCustom({

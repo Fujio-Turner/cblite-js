@@ -145,6 +145,8 @@ export class Query {
       changeListenerToken: token,
       name: this._database.getUniqueName(),
     });
+
+    this._didStartQueryListener = false;
   }
 
   setDatabase(database: Database) {

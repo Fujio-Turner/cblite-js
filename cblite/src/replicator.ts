@@ -252,6 +252,8 @@ export class Replicator {
       replicatorId: this._replicatorId,
       changeListenerToken: token,
     });
+
+    this._didStartStatusChangeListener = false;
   }
 
   /**

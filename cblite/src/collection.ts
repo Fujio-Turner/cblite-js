@@ -1140,6 +1140,8 @@ export class Collection {
       collectionName: this.name,
       changeListenerToken: token,
     });
+
+    this._didStartListener = false;
   }
   
   /**

@@ -50,30 +50,33 @@ export interface CustomLogSinkConfig {
 
 /**
  * Arguments for setting console log sink (internal bridge use)
+ * Note: level of -1 is used as a sentinel value to indicate "disable"
  */
 export interface LogSinksSetConsoleArgs {
-  level: number | null;
-  domains: string[] | null;
+  level: number;
+  domains: string[];
 }
 
 /**
  * Arguments for setting file log sink (internal bridge use)
+ * Note: level of -1 and empty config is used as a sentinel value to indicate "disable"
  */
 export interface LogSinksSetFileArgs {
-  level: number | null;
+  level: number;
   config: {
-    directory: string;
+    directory?: string;
     usePlaintext?: boolean;
     maxFileSize?: number;
     maxKeptFiles?: number;
-  } | null;
+  };
 }
 
 /**
  * Arguments for setting custom log sink (internal bridge use)
+ * Note: level of -1 and empty token is used as a sentinel value to indicate "disable"
  */
 export interface LogSinksSetCustomArgs {
-  level: number | null;
-  domains: string[] | null;
-  token: string | null;
+  level: number;
+  domains: string[];
+  token: string;
 }
