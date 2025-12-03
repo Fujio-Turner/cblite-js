@@ -42,4 +42,7 @@ export * from './url-endpoint';
 export * from './value-index';
 export * from './variable-expression';
 export * from './url-endpoint-listener';
+export * from './log-sinks-enums';
+export * from './log-sinks';
+export type { ConsoleLogSinkConfig, FileLogSinkConfig, CustomLogSinkConfig } from './log-sinks-types';
 export { ListenerToken } from './listener-token';

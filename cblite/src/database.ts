@@ -14,34 +14,10 @@ import {
 import { Collection } from './collection';
 import { Scope } from './scope';
 import { Query } from './query';
+import { LogDomain, LogLevel } from './log-sinks-enums';
 
-export enum LogDomain {
-  // eslint-disable-next-line 
-  ALL = 'ALL',
-  // eslint-disable-next-line 
-  DATABASE = 'DATABASE',
-  // eslint-disable-next-line 
-  NETWORK = 'NETWORK',
-  // eslint-disable-next-line 
-  QUERY = 'QUERY',
-  // eslint-disable-next-line 
-  REPLICATOR = 'REPLICATOR',
-}
-
-export enum LogLevel {
-  // eslint-disable-next-line 
-  DEBUG = 0,
-  // eslint-disable-next-line 
-  VERBOSE = 1,
-  // eslint-disable-next-line 
-  INFO = 2,
-  // eslint-disable-next-line 
-  WARNING = 3,
-  // eslint-disable-next-line 
-  ERROR = 4,
-  // eslint-disable-next-line 
-  NONE = 5,
-}
+// Re-export for backward compatibility with old API
+export { LogDomain, LogLevel };
 
 export enum MaintenanceType {
   // eslint-disable-next-line 

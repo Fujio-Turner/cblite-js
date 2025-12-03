@@ -173,8 +173,6 @@ export class Query {
       });
       this._didStartQueryListener = false;
     }
-
-
   }
 
   setDatabase(database: Database) {

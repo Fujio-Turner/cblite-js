@@ -317,8 +317,6 @@ export class Replicator {
       // It's a status listener so we need to reset the flag
       this._didStartStatusChangeListener = false;
     }
-
-
   }
 
   /**
