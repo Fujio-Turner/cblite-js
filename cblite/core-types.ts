@@ -98,6 +98,38 @@ export interface CollectionCreateIndexArgs extends CollectionArgs {
 }
 
 /**
+ * Represents arguments for creating a Vector Index
+ *
+ * This interface is used to return the arguments
+ * for creating a Vector Index in a Collection
+ *
+ * @interface
+ * @property {string} name - The unique name of the database
+ * @property {string} scopeName - The unique name of the Scope
+ * @property {string} collectionName - The unique name of the Collection
+ * @property {string} indexName - The unique name of the vector index
+ * @property {object} config - The vector index configuration
+ */
+export interface CollectionCreateVectorIndexArgs extends CollectionArgs {
+  indexName: string;
+  config: {
+    expression: string;
+    dimensions: number;
+    centroids: number;
+    metric?: string;
+    encoding?: {
+      type: string;
+      bits?: number;
+      subquantizers?: number;
+    };
+    minTrainingSize?: number;
+    maxTrainingSize?: number;
+    numProbes?: number;
+    isLazy?: boolean;
+  };
+}
+
+/**
  * Represents arguments for a deleting a document from a collection
  *
  * This interface is used to return the arguments
@@ -638,6 +670,17 @@ export interface ICoreEngine {
    * @property {CollectionCreateIndexArgs} arguments for creating an Index
    */
   collection_CreateIndex(args: CollectionCreateIndexArgs): Promise<void>;
+
+  /**
+   * Represents creating a Vector Index
+   *
+   * This function is used to create a Vector Index in a Collection for
+   * similarity search using APPROX_VECTOR_DISTANCE queries.
+   *
+   * @interface
+   * @property {CollectionCreateVectorIndexArgs} arguments for creating a Vector Index
+   */
+  collection_CreateVectorIndex(args: CollectionCreateVectorIndexArgs): Promise<void>;
 
   collection_DeleteCollection(args: CollectionArgs): Promise<void>;
 
